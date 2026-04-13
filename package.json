@@ -1,0 +1,117 @@
+{
+  "name": "csv-preview",
+  "displayName": "CSV Preview",
+  "description": "Preview CSV files as colorful tables",
+  "version": "1.0.0",
+  "publisher": "purestone",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:csv",
+    "onLanguage:tsv"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "CSV-Preview",
+      "properties": {
+        "csv-preview.colors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "var(--vscode-editor-foreground)",
+            "var(--vscode-symbolIcon-keywordForeground)",
+            "var(--vscode-symbolIcon-functionForeground)",
+            "var(--vscode-descriptionForeground)",
+            "var(--vscode-symbolIcon-stringForeground)",
+            "var(--vscode-symbolIcon-variableForeground)",
+            "var(--vscode-symbolIcon-constantForeground)",
+            "var(--vscode-symbolIcon-classForeground)",
+            "var(--vscode-editor-foreground)",
+            "var(--vscode-editorError-foreground)"
+          ],
+          "description": "Colors to use for the column text. You can use any valid CSS color, including VS Code theme variables."
+        },
+        "csv-preview.rowBackgroundMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "default": "auto",
+          "description": "Row background theme mode. Auto detects current VS Code theme in preview."
+        },
+        "csv-preview.rowBackgroundLightOdd": {
+          "type": "string",
+          "default": "rgba(0, 0, 0, 0.05)",
+          "description": "Background color for odd rows in light mode."
+        },
+        "csv-preview.rowBackgroundLightEven": {
+          "type": "string",
+          "default": "rgba(0, 0, 0, 0.02)",
+          "description": "Background color for even rows in light mode."
+        },
+        "csv-preview.rowBackgroundDarkOdd": {
+          "type": "string",
+          "default": "rgba(255, 255, 255, 0.06)",
+          "description": "Background color for odd rows in dark mode."
+        },
+        "csv-preview.rowBackgroundDarkEven": {
+          "type": "string",
+          "default": "rgba(255, 255, 255, 0.03)",
+          "description": "Background color for even rows in dark mode."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "csv-preview.preview",
+        "title": "Preview CSV",
+        "icon": "$(table)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceExtname == .csv || resourceExtname == .tsv",
+          "command": "csv-preview.preview",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "csv-preview.preview",
+        "key": "cmd+alt+v",
+        "mac": "cmd+alt+v",
+        "win": "ctrl+alt+v",
+        "when": "editorTextFocus && (resourceExtname == .csv || resourceExtname == .tsv)"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map"
+  },
+  "dependencies": {
+    "papaparse": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/papaparse": "^5.3.14",
+    "@types/vscode": "^1.80.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.2.2",
+    "webpack": "^5.93.0",
+    "webpack-cli": "^5.1.4"
+  }
+}

@@ -1,0 +1,10 @@
+id,name,notes,amount,active,date,json_like
+1,Alice,"contains, comma",123.45,true,2026-04-14,"{""k"":""v""}"
+2,Bob,"has ""quoted"" text",-9,false,2025-12-31,"[]"
+3,Carol,"multi-line
+second line",0,true,2024-02-29,"null"
+4,,"leading and trailing spaces ",42,true,2026-01-01,"{""a"":1}"
+5,Eve,"",,false,,""
+6,Frank,"tab\tinside",1000,true,2023-07-07,"{""nested"":{""x"":""y""}}"
+7,Gina,"=2+3",77,true,2022-08-08,"text"
+8,Hank,"comma, quote "" and newline marker \\n",15,false,2021-11-11,"{""list"":[1,2,3]}"
