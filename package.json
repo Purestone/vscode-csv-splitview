@@ -25,15 +25,13 @@
             "type": "string"
           },
           "default": [
-            "var(--vscode-editor-foreground)",
             "var(--vscode-symbolIcon-keywordForeground)",
             "var(--vscode-symbolIcon-functionForeground)",
             "var(--vscode-descriptionForeground)",
-            "var(--vscode-symbolIcon-stringForeground)",
             "var(--vscode-symbolIcon-variableForeground)",
-            "var(--vscode-symbolIcon-constantForeground)",
+            "var(--vscode-symbolIcon-keywordForeground)",
             "var(--vscode-symbolIcon-classForeground)",
-            "var(--vscode-editor-foreground)",
+            "var(--vscode-descriptionForeground)",
             "var(--vscode-editorError-foreground)"
           ],
           "description": "Colors to use for the column text. You can use any valid CSS color, including VS Code theme variables."
