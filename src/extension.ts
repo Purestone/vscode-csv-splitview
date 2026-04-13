@@ -118,23 +118,33 @@ export function activate(context: vscode.ExtensionContext) {
 
 function revealCell(uri: vscode.Uri | undefined, rowIndex: number, colIndex: number) {
     if (!uri) return;
-    const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
-    if (!editor) return;
 
     const delimiter = uri.fsPath.endsWith('.tsv') ? '\t' : ',';
     const targetRow = rowIndex + 1; // Header row is 0, first data row is 1.
     if (targetRow < 0 || colIndex < 0) return;
 
-    const range = findCsvCellRange(editor.document.getText(), targetRow, colIndex, delimiter);
-    if (!range) return;
+    const activateAndReveal = (document: vscode.TextDocument, viewColumn?: vscode.ViewColumn) => {
+        const range = findCsvCellRange(document.getText(), targetRow, colIndex, delimiter);
+        if (!range) return;
 
-    const startPos = editor.document.positionAt(range.start);
-    const endPos = editor.document.positionAt(range.end);
-    const selection = new vscode.Selection(startPos, endPos);
+        const startPos = document.positionAt(range.start);
+        const endPos = document.positionAt(range.end);
+        const selection = new vscode.Selection(startPos, endPos);
 
-    vscode.window.showTextDocument(editor.document, editor.viewColumn, true).then(e => {
-        e.selection = selection;
-        e.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+        vscode.window.showTextDocument(document, { viewColumn, preview: false, preserveFocus: false }).then(editor => {
+            editor.selection = selection;
+            editor.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+        });
+    };
+
+    const existingEditor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
+    if (existingEditor) {
+        activateAndReveal(existingEditor.document, existingEditor.viewColumn);
+        return;
+    }
+
+    vscode.workspace.openTextDocument(uri).then(document => {
+        activateAndReveal(document);
     });
 }
 
