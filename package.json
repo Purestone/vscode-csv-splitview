@@ -14,7 +14,8 @@
   "categories": [
     "Other"
   ],
-  "main": "./dist/extension.js",
+  "main": "dist/extension.js",
+  "icon": "assets/logo.png",
   "activationEvents": [
     "onLanguage:csv",
     "onLanguage:tsv"
