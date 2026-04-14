@@ -193,21 +193,28 @@ function getWebviewContent(
             --csv-row-bg-even: ${rowOptions.rowBgDarkEven};
         }
         table {
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             width: 100%;
             margin-top: 20px;
         }
         th, td {
-            border: 1px solid var(--vscode-editorGroup-border);
+            border-right: 1px solid var(--vscode-editorGroup-border);
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
             padding: 8px 12px;
             text-align: left;
             cursor: text;
+        }
+        th:first-child, td:first-child {
+            border-left: 1px solid var(--vscode-editorGroup-border);
         }
         th {
             font-weight: bold;
             position: sticky;
             top: 0;
             z-index: 1;
+            background-color: var(--vscode-editor-background);
+            border-top: 1px solid var(--vscode-editorGroup-border);
             border-bottom: 2px solid var(--vscode-editorGroup-border);
         }
         
