@@ -1,12 +1,12 @@
 {
-  "name": "csv-preview",
-  "displayName": "CSV Preview",
-  "description": "Preview CSV files as colorful tables",
+  "name": "csv-splitview",
+  "displayName": "CSV SplitView",
+  "description": "Side-by-side split preview for CSV/TSV files as colorful tables",
   "version": "1.0.0",
   "publisher": "purestone",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Purestone/vscode-csv-preview.git"
+    "url": "https://github.com/Purestone/csv-splitview.git"
   },
   "engines": {
     "vscode": "^1.80.0"
@@ -21,9 +21,9 @@
   ],
   "contributes": {
     "configuration": {
-      "title": "CSV-Preview",
+      "title": "CSV SplitView",
       "properties": {
-        "csv-preview.colors": {
+        "csv-splitview.colors": {
           "type": "array",
           "items": {
             "type": "string"
@@ -40,7 +40,7 @@
           ],
           "description": "Colors to use for the column text. You can use any valid CSS color, including VS Code theme variables."
         },
-        "csv-preview.rowBackgroundMode": {
+        "csv-splitview.rowBackgroundMode": {
           "type": "string",
           "enum": [
             "auto",
@@ -50,22 +50,22 @@
           "default": "auto",
           "description": "Row background theme mode. Auto detects current VS Code theme in preview."
         },
-        "csv-preview.rowBackgroundLightOdd": {
+        "csv-splitview.rowBackgroundLightOdd": {
           "type": "string",
           "default": "rgba(0, 0, 0, 0.05)",
           "description": "Background color for odd rows in light mode."
         },
-        "csv-preview.rowBackgroundLightEven": {
+        "csv-splitview.rowBackgroundLightEven": {
           "type": "string",
           "default": "rgba(0, 0, 0, 0.02)",
           "description": "Background color for even rows in light mode."
         },
-        "csv-preview.rowBackgroundDarkOdd": {
+        "csv-splitview.rowBackgroundDarkOdd": {
           "type": "string",
           "default": "rgba(255, 255, 255, 0.06)",
           "description": "Background color for odd rows in dark mode."
         },
-        "csv-preview.rowBackgroundDarkEven": {
+        "csv-splitview.rowBackgroundDarkEven": {
           "type": "string",
           "default": "rgba(255, 255, 255, 0.03)",
           "description": "Background color for even rows in dark mode."
@@ -74,8 +74,8 @@
     },
     "commands": [
       {
-        "command": "csv-preview.preview",
-        "title": "Preview CSV",
+        "command": "csv-splitview.preview",
+        "title": "SplitView: Preview CSV",
         "icon": "$(table)"
       }
     ],
@@ -83,14 +83,14 @@
       "editor/title": [
         {
           "when": "resourceExtname == .csv || resourceExtname == .tsv",
-          "command": "csv-preview.preview",
+          "command": "csv-splitview.preview",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "csv-preview.preview",
+        "command": "csv-splitview.preview",
         "key": "cmd+alt+v",
         "mac": "cmd+alt+v",
         "win": "ctrl+alt+v",

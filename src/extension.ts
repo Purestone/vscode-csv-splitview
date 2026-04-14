@@ -18,7 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
             skipEmptyLines: false
         });
 
-        const config = vscode.workspace.getConfiguration('csv-preview');
+        const config = vscode.workspace.getConfiguration('csv-splitview');
         const colors = config.get<string[]>('colors', [
             'var(--vscode-editor-foreground)',
             'var(--vscode-symbolIcon-keywordForeground)',
@@ -47,7 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
     };
 
-    let disposable = vscode.commands.registerCommand('csv-preview.preview', () => {
+    let disposable = vscode.commands.registerCommand('csv-splitview.preview', () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             vscode.window.showErrorMessage('No active editor found.');
@@ -104,7 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
     }, null, context.subscriptions);
 
     vscode.workspace.onDidChangeConfiguration(event => {
-        if (event.affectsConfiguration('csv-preview')) {
+        if (event.affectsConfiguration('csv-splitview')) {
             updateWebview();
         }
     }, null, context.subscriptions);
@@ -175,7 +175,7 @@ function getWebviewContent(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Preview</title>
+    <title>CSV SplitView</title>
     <style>
         body {
             font-family: var(--vscode-font-family);
