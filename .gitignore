@@ -20,3 +20,5 @@ pnpm-debug.log*
 
 # Local editor settings
 .vscode/
+
+*.csv

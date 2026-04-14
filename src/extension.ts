@@ -1,133 +1,186 @@
 import * as vscode from 'vscode';
 import * as Papa from 'papaparse';
 import * as path from 'path';
+import * as fs from 'fs';
+import { Readable } from 'stream';
 import { findCsvCellRange } from './csvCellRange';
 
 let currentPanel: vscode.WebviewPanel | undefined = undefined;
 let currentDocumentUri: vscode.Uri | undefined = undefined;
 let updateTimer: NodeJS.Timeout | undefined = undefined;
 
+let lastOptionsKey = '';
+let currentStreamId = 0;
+
 export function activate(context: vscode.ExtensionContext) {
-    const updateWebview = () => {
+    const updateWebview = async (forceReloadHtml: boolean = false) => {
         if (!currentPanel || !currentDocumentUri) return;
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === currentDocumentUri?.toString());
         if (!editor) return;
 
-        const text = editor.document.getText();
-        const parsed = Papa.parse(text, {
-            header: true,
-            skipEmptyLines: false
-        });
-
         const config = vscode.workspace.getConfiguration('csv-splitview');
-        const colors = config.get<string[]>('colors', [
-            'var(--vscode-editor-foreground)',
-            'var(--vscode-symbolIcon-keywordForeground)',
-            'var(--vscode-symbolIcon-functionForeground)',
-            'var(--vscode-descriptionForeground)',
-            'var(--vscode-symbolIcon-stringForeground)',
-            'var(--vscode-symbolIcon-variableForeground)',
-            'var(--vscode-symbolIcon-constantForeground)',
-            'var(--vscode-symbolIcon-classForeground)',
-            'var(--vscode-editor-foreground)',
-            'var(--vscode-editorError-foreground)'
-        ]);
-
+        const colors = config.get<string[]>('colors', []);
         const rowBackgroundMode = config.get<'auto' | 'light' | 'dark'>('rowBackgroundMode', 'auto');
         const rowBgLightOdd = config.get<string>('rowBackgroundLightOdd', 'rgba(0, 0, 0, 0.05)');
         const rowBgLightEven = config.get<string>('rowBackgroundLightEven', 'rgba(0, 0, 0, 0.02)');
         const rowBgDarkOdd = config.get<string>('rowBackgroundDarkOdd', 'rgba(255, 255, 255, 0.06)');
         const rowBgDarkEven = config.get<string>('rowBackgroundDarkEven', 'rgba(255, 255, 255, 0.03)');
 
-        currentPanel.webview.html = getWebviewContent(colors, {
-            rowBackgroundMode,
-            rowBgLightOdd,
-            rowBgLightEven,
-            rowBgDarkOdd,
-            rowBgDarkEven
-        });
+        const optionsKey = JSON.stringify({ colors, rowBackgroundMode, rowBgLightOdd, rowBgLightEven, rowBgDarkOdd, rowBgDarkEven });
+        
+        if (forceReloadHtml || optionsKey !== lastOptionsKey) {
+            currentPanel.webview.html = getWebviewContent(colors, {
+                rowBackgroundMode,
+                rowBgLightOdd,
+                rowBgLightEven,
+                rowBgDarkOdd,
+                rowBgDarkEven
+            });
+            lastOptionsKey = optionsKey;
+            return;
+        }
 
-        // Send data to webview
-        currentPanel.webview.postMessage({
-            command: 'setData',
-            headers: parsed.meta.fields || [],
-            data: parsed.data
+        const streamId = ++currentStreamId;
+        const document = editor.document;
+        
+        let inputStream: Readable;
+        if (document.isDirty) {
+            inputStream = Readable.from(document.getText());
+        } else {
+            inputStream = fs.createReadStream(document.uri.fsPath);
+        }
+
+        let headers: string[] | null = null;
+        let colCount = 0;
+        let isFirstBatch = true;
+        const encoder = new TextEncoder();
+
+        Papa.parse(inputStream, {
+            header: false,
+            skipEmptyLines: false,
+            chunkSize: 1024 * 512, // 512KB chunks for steady parsing
+            chunk: (results, parser) => {
+                if (streamId !== currentStreamId) {
+                    parser.abort();
+                    return;
+                }
+
+                const rows = results.data as string[][];
+                if (rows.length === 0) return;
+
+                let dataStart = 0;
+                if (!headers) {
+                    headers = rows[0];
+                    colCount = headers.length;
+                    dataStart = 1;
+                    
+                    currentPanel?.webview.postMessage({
+                        command: 'startData',
+                        headers,
+                        colCount
+                    });
+                }
+
+                const batchRows = rows.slice(dataStart);
+                if (batchRows.length === 0) return;
+
+                const rowCount = batchRows.length;
+                let totalByteLength = 0;
+                for (const row of batchRows) {
+                    for (let j = 0; j < colCount; j++) {
+                        totalByteLength += Buffer.byteLength(row[j] || '', 'utf8');
+                    }
+                }
+
+                const textBuffer = new Uint8Array(totalByteLength);
+                const offsetBuffer = new Uint32Array(rowCount * colCount * 2);
+                let currentByteOffset = 0;
+                let cellIdx = 0;
+
+                for (const row of batchRows) {
+                    for (let j = 0; j < colCount; j++) {
+                        const val = row[j] || '';
+                        const encoded = encoder.encode(val);
+                        textBuffer.set(encoded, currentByteOffset);
+                        offsetBuffer[cellIdx * 2] = currentByteOffset;
+                        offsetBuffer[cellIdx * 2 + 1] = encoded.length;
+                        currentByteOffset += encoded.length;
+                        cellIdx++;
+                    }
+                }
+
+                currentPanel?.webview.postMessage({
+                    command: 'appendData',
+                    rowCount,
+                    textBuffer: textBuffer.buffer,
+                    offsetBuffer: offsetBuffer.buffer
+                });
+            },
+            complete: () => {
+                if (streamId === currentStreamId) {
+                    currentPanel?.webview.postMessage({ command: 'endData' });
+                }
+            }
         });
     };
 
     let disposable = vscode.commands.registerCommand('csv-splitview.preview', () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage('No active editor found.');
-            return;
-        }
+        if (!editor) return;
 
         const document = editor.document;
-        if (document.languageId !== 'csv' && document.languageId !== 'tsv' && !document.fileName.endsWith('.csv')) {
-            vscode.window.showErrorMessage('Please open a CSV or TSV file first.');
-            return;
-        }
-
         currentDocumentUri = document.uri;
 
         if (currentPanel) {
             currentPanel.reveal(vscode.ViewColumn.Beside);
-            updateWebview();
+            updateWebview(false);
         } else {
             currentPanel = vscode.window.createWebviewPanel(
                 'csvPreview',
                 `Preview: ${path.basename(document.fileName)}`,
                 vscode.ViewColumn.Beside,
-                {
-                    enableScripts: true,
-                    retainContextWhenHidden: true
-                }
+                { enableScripts: true, retainContextWhenHidden: true }
             );
 
             currentPanel.onDidDispose(() => {
                 currentPanel = undefined;
                 currentDocumentUri = undefined;
+                lastOptionsKey = '';
             }, null, context.subscriptions);
 
-            currentPanel.webview.onDidReceiveMessage(
-                message => {
-                    if (message.command === 'locateCell') {
-                        const row = message.row;
-                        const col = message.col;
-                        revealCell(currentDocumentUri, row, col);
-                    } else if (message.command === 'ready') {
-                        updateWebview();
-                    }
-                },
-                undefined,
-                context.subscriptions
-            );
+            currentPanel.webview.onDidReceiveMessage(message => {
+                if (message.command === 'locateCell') {
+                    revealCell(currentDocumentUri, message.row, message.col);
+                } else if (message.command === 'ready') {
+                    updateWebview(false);
+                }
+            }, undefined, context.subscriptions);
 
-            updateWebview();
+            updateWebview(true); // Initial load requires HTML set
         }
     });
 
     vscode.workspace.onDidChangeTextDocument(event => {
         if (currentDocumentUri && event.document.uri.toString() === currentDocumentUri.toString()) {
             if (updateTimer) clearTimeout(updateTimer);
-            updateTimer = setTimeout(() => {
-                updateWebview();
-            }, 300);
+            updateTimer = setTimeout(() => updateWebview(false), 300);
         }
     }, null, context.subscriptions);
 
     vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration('csv-splitview')) {
-            updateWebview();
+            updateWebview(true);
         }
     }, null, context.subscriptions);
 
     vscode.window.onDidChangeActiveColorTheme(() => {
-        updateWebview();
+        updateWebview(false);
     }, null, context.subscriptions);
 
     context.subscriptions.push(disposable);
 }
+
+
 
 function revealCell(uri: vscode.Uri | undefined, rowIndex: number, colIndex: number) {
     if (!uri) return;
@@ -303,8 +356,13 @@ function getWebviewContent(
             rowBackgroundMode: '${rowOptions.rowBackgroundMode}'
         };
 
-        let currentData = [];
         let currentHeaders = [];
+        let textBuffer = null;
+        let offsetBuffer = null;
+        let rowCount = 0;
+        let colCount = 0;
+        const decoder = new TextDecoder();
+
         const AVG_ROW_HEIGHT = 37;
         const BUFFER_ROWS = 20;
         
@@ -324,6 +382,15 @@ function getWebviewContent(
             return Math.ceil(metrics.width) + 28; // text + 24px padding + 4px extra buffer
         }
 
+        function getCellValue(row, col) {
+            if (!textBuffer || !offsetBuffer) return '';
+            const idx = (row * colCount) + col;
+            const start = offsetBuffer[idx * 2];
+            const length = offsetBuffer[idx * 2 + 1];
+            if (length === 0) return '';
+            return decoder.decode(textBuffer.subarray(start, start + length));
+        }
+
         function escapeHtml(value) {
             if (value === null || value === undefined) return '';
             return String(value)
@@ -335,7 +402,7 @@ function getWebviewContent(
         }
 
         function render() {
-            if (currentData.length === 0) return;
+            if (rowCount === 0 || !textBuffer || !offsetBuffer) return;
 
             const scrollTop = viewport.scrollTop;
             const scrollLeft = viewport.scrollLeft;
@@ -356,7 +423,7 @@ function getWebviewContent(
             let startIndex = Math.floor(scrollTop / AVG_ROW_HEIGHT) - BUFFER_ROWS;
             startIndex = Math.max(0, startIndex);
             let endIndex = Math.ceil((scrollTop + viewportHeight) / AVG_ROW_HEIGHT) + BUFFER_ROWS;
-            endIndex = Math.min(currentData.length, endIndex);
+            endIndex = Math.min(rowCount, endIndex);
 
             // Double check headers in case font was not ready earlier
             if (currentHeaders.length > 0) {
@@ -367,9 +434,8 @@ function getWebviewContent(
             }
 
             for (let i = startIndex; i < endIndex; i++) {
-                const row = currentData[i];
-                for (let j = 0; j < currentHeaders.length; j++) {
-                    const val = row[currentHeaders[j]];
+                for (let j = 0; j < colCount; j++) {
+                    const val = getCellValue(i, j);
                     const w = measureCellWidth(val);
                     if (w > (lockedWidths[j] || 0)) {
                         lockedWidths[j] = w;
@@ -391,12 +457,10 @@ function getWebviewContent(
             let html = '<tr class="buffer-row" style="height:' + offsetY + 'px"><td colspan="' + currentHeaders.length + '"></td></tr>';
             
             for (let i = startIndex; i < endIndex; i++) {
-                const row = currentData[i];
                 const rowClass = (i % 2 === 0) ? 'even' : 'odd';
                 let cells = '';
                 for (let j = 0; j < currentHeaders.length; j++) {
-                    const h = currentHeaders[j];
-                    const val = row[h] !== undefined ? row[h] : '';
+                    const val = getCellValue(i, j);
                     cells += '<td data-row="' + i + '" data-col="' + j + '">' + escapeHtml(val) + '</td>';
                 }
                 html += '<tr class="' + rowClass + '">' + cells + '</tr>';
@@ -418,27 +482,65 @@ function getWebviewContent(
 
         window.addEventListener('message', event => {
             const message = event.data;
-            if (message.command === 'setData') {
-                currentHeaders = message.headers;
-                currentData = message.data;
-                
-                // Reset state
-                lockedWidths.length = 0;
-                currentHeaders.forEach((h, i) => {
-                    lockedWidths[i] = measureCellWidth(h, true);
-                });
+            if (message.command === 'startData') {
+                // Stage the new metadata without clearing the screen yet
+                window.stagedHeaders = message.headers;
+                window.stagedColCount = message.colCount;
+                window.isFirstBatch = true;
+            } else if (message.command === 'appendData') {
+                const newTextPart = new Uint8Array(message.textBuffer);
+                const newOffsetPart = new Uint32Array(message.offsetBuffer);
+                const newRowsCount = message.rowCount;
 
-                spacer.style.height = (currentData.length * AVG_ROW_HEIGHT) + AVG_ROW_HEIGHT + 'px';
-                stats.textContent = 'Rows: ' + currentData.length;
+                if (window.isFirstBatch) {
+                    // Atomic Swap: First batch of new stream has arrived
+                    currentHeaders = window.stagedHeaders;
+                    colCount = window.stagedColCount;
+                    textBuffer = newTextPart;
+                    offsetBuffer = newOffsetPart;
+                    rowCount = newRowsCount;
+                    window.isFirstBatch = false;
 
-                let headerHtml = '<tr>';
-                for (let i = 0; i < currentHeaders.length; i++) {
-                    const w = Math.min(800, lockedWidths[i]) + 'px';
-                    headerHtml += '<th data-col="' + i + '" style="width:' + w + '; min-width:' + w + '">' + escapeHtml(currentHeaders[i]) + '</th>';
+                    // Update headers and reset state
+                    lockedWidths.length = 0;
+                    currentHeaders.forEach((h, i) => {
+                        lockedWidths[i] = measureCellWidth(h, true);
+                    });
+
+                    let headerHtml = '<tr>';
+                    for (let i = 0; i < currentHeaders.length; i++) {
+                        const w = Math.min(800, lockedWidths[i]) + 'px';
+                        headerHtml += '<th data-col="' + i + '" style="width:' + w + '; min-width:' + w + '">' + escapeHtml(currentHeaders[i]) + '</th>';
+                    }
+                    headerHtml += '</tr>';
+                    header.innerHTML = headerHtml;
+
+                    body.innerHTML = ''; // Only clear now
+                } else {
+                    // Standard incremental append logic
+                    const combinedText = new Uint8Array(textBuffer.length + newTextPart.length);
+                    combinedText.set(textBuffer);
+                    combinedText.set(newTextPart, textBuffer.length);
+                    textBuffer = combinedText;
+
+                    const currentTextOffset = (textBuffer.length - newTextPart.length);
+                    const expandedOffset = new Uint32Array(offsetBuffer.length + newOffsetPart.length);
+                    expandedOffset.set(offsetBuffer);
+                    for (let i = 0; i < newOffsetPart.length; i += 2) {
+                        newOffsetPart[i] += currentTextOffset;
+                    }
+                    expandedOffset.set(newOffsetPart, offsetBuffer.length);
+                    offsetBuffer = expandedOffset;
+                    rowCount += newRowsCount;
                 }
-                headerHtml += '</tr>';
-                header.innerHTML = headerHtml;
 
+                spacer.style.height = (rowCount * AVG_ROW_HEIGHT) + AVG_ROW_HEIGHT + 'px';
+                stats.textContent = 'Rows: ' + rowCount + (message.command === 'appendData' ? ' (loading...)' : '');
+
+                // Trigger render
+                render();
+            } else if (message.command === 'endData') {
+                stats.textContent = 'Rows: ' + rowCount;
                 render();
             }
         });
