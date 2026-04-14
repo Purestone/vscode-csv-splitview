@@ -2,7 +2,7 @@
   "name": "csv-splitview",
   "displayName": "CSV SplitView",
   "description": "Side-by-side split preview for CSV/TSV files as colorful tables",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "purestone",
   "repository": {
     "type": "git",
