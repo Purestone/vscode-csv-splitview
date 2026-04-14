@@ -1,18 +1,20 @@
 
 # CSV SplitView
 
-CSV SplitView is a VS Code extension that shows CSV and TSV files in a side-by-side split interactive table.
+[![GitHub Repo](https://img.shields.io/badge/repo-github.com%2FPurestone%2Fvscode--csv--splitview-blue?logo=github)](https://github.com/Purestone/vscode-csv-splitview)
+
+CSV SplitView is a VS Code extension that lets you preview CSV and TSV files in a true side-by-side (split view) interactive table, making it easy to compare data and source at a glance.
 
 ## Features
 
-- Split/side-by-side preview of CSV and TSV in a webview table.
-- Click with Cmd (macOS) or Ctrl (Windows/Linux) on a cell to jump to the source field in the editor.
+- True split/side-by-side preview: See your CSV/TSV file as a colorful table right next to the raw text.
+- Click with Cmd (macOS) or Ctrl (Windows/Linux) on a cell to instantly jump to the corresponding field in the editor.
 - Theme-aware colors using VS Code theme variables.
 - Configurable row background mode with automatic light/dark detection.
 
 ## Commands
 
-- `SplitView: Preview CSV` (`csv-splitview.preview`)
+- `CSV SplitView: Preview CSV` (`csv-splitview.preview`)
 
 ## Settings
 
@@ -26,16 +28,15 @@ CSV SplitView is a VS Code extension that shows CSV and TSV files in a side-by-s
 ## Development
 
 1. Install dependencies:
-
    npm install
-
 2. Build:
-
    npm run compile
-
 3. Debug:
-
    Run the `Run Extension` launch target in VS Code.
+
+## Repository
+
+<https://github.com/Purestone/vscode-csv-splitview>
 
 ## License
 
