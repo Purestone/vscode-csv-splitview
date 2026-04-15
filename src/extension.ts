@@ -274,10 +274,14 @@ function getWebviewContent(
             padding: 8px 12px;
             text-align: left;
             cursor: text;
-            word-break: break-all;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
             min-width: 80px;
             max-width: 800px;
             box-sizing: border-box;
+            line-height: 20px;
+            height: 37px;
         }
         th:first-child, td:first-child {
             border-left: 1px solid var(--vscode-editorGroup-border);
@@ -373,13 +377,12 @@ function getWebviewContent(
 
         function measureCellWidth(text, isHeader = false) {
             const style = window.getComputedStyle(document.body);
-            // Clean font string: remove any existing weight to avoid "bold 400" conflict
             const fontSize = style.fontSize || '13px';
             const fontFamily = style.fontFamily || 'monospace';
             ctx.font = (isHeader ? 'bold ' : 'normal ') + fontSize + ' ' + fontFamily;
             
             const metrics = ctx.measureText(text || '');
-            return Math.ceil(metrics.width) + 28; // text + 24px padding + 4px extra buffer
+            return Math.ceil(metrics.width) + 28;
         }
 
         function getCellValue(row, col) {
@@ -401,6 +404,16 @@ function getWebviewContent(
                 .replace(/'/g, '&#39;');
         }
 
+        let renderFrameRequested = false;
+        function requestRender() {
+            if (renderFrameRequested) return;
+            renderFrameRequested = true;
+            requestAnimationFrame(() => {
+                renderFrameRequested = false;
+                render();
+            });
+        }
+
         function render() {
             if (rowCount === 0 || !textBuffer || !offsetBuffer) return;
 
@@ -408,51 +421,69 @@ function getWebviewContent(
             const scrollLeft = viewport.scrollLeft;
             const viewportHeight = viewport.clientHeight;
             
-            // 1. Identify Anchor Column Identifying
+            // 1. Identify Anchor Column for stable horizontal scrolling
             const ths = Array.from(header.querySelectorAll('th'));
-            const visibleCols = [];
+            let anchor = { index: 0, offset: 0 };
             for (let i = 0; i < ths.length; i++) {
                 if (ths[i].offsetLeft + ths[i].offsetWidth > scrollLeft) {
-                    visibleCols.push({ index: i, offset: ths[i].offsetLeft - scrollLeft });
-                    if (visibleCols.length >= 2) break; 
+                    anchor = { index: i, offset: ths[i].offsetLeft - scrollLeft };
+                    break;
                 }
             }
-            const anchor = visibleCols.length >= 2 ? visibleCols[1] : (visibleCols[0] || { index: 0, offset: 0 });
 
-            // 2. Scan and lock widths - including ensuring headers are accounted for
+            // 2. Identify visible range
             let startIndex = Math.floor(scrollTop / AVG_ROW_HEIGHT) - BUFFER_ROWS;
             startIndex = Math.max(0, startIndex);
             let endIndex = Math.ceil((scrollTop + viewportHeight) / AVG_ROW_HEIGHT) + BUFFER_ROWS;
             endIndex = Math.min(rowCount, endIndex);
 
-            // Double check headers in case font was not ready earlier
+            // 3. Scan widths (Optimized: only check a few rows if we already have many)
+            let widthsChanged = false;
+            // Always check headers
             if (currentHeaders.length > 0) {
                 for (let j = 0; j < currentHeaders.length; j++) {
                     const headerW = measureCellWidth(currentHeaders[j], true);
-                    if (headerW > (lockedWidths[j] || 0)) lockedWidths[j] = headerW;
+                    if (headerW > (lockedWidths[j] || 0)) {
+                        lockedWidths[j] = headerW;
+                        widthsChanged = true;
+                    }
                 }
             }
 
-            for (let i = startIndex; i < endIndex; i++) {
+            // Check current visible rows ONLY to update width cache
+            // We sample rows to avoid expensive calculations on every scroll
+            const sampleStep = (endIndex - startIndex > 100) ? 5 : 1;
+            for (let i = startIndex; i < endIndex; i += sampleStep) {
                 for (let j = 0; j < colCount; j++) {
                     const val = getCellValue(i, j);
+                    if (val.length < (lockedWidths[j] || 0) / 10) continue; // Optimization: skip tiny strings
                     const w = measureCellWidth(val);
                     if (w > (lockedWidths[j] || 0)) {
                         lockedWidths[j] = w;
+                        widthsChanged = true;
                     }
                 }
             }
             
-            // Apply locked widths
-            ths.forEach((th, i) => {
-                const w = Math.min(800, lockedWidths[i]) + 'px';
-                if (th.style.width !== w) {
-                    th.style.width = w;
-                    th.style.minWidth = w;
+            // 4. Update Header Widths
+            if (widthsChanged) {
+                ths.forEach((th, i) => {
+                    const w = Math.min(800, lockedWidths[i]) + 'px';
+                    if (th.style.width !== w) {
+                        th.style.width = w;
+                        th.style.minWidth = w;
+                    }
+                });
+                
+                // CRITICAL: Synchronous anchor correction to prevent horizontal jitter
+                let cumulativeLeft = 0;
+                for (let i = 0; i < anchor.index; i++) {
+                    cumulativeLeft += Math.min(800, lockedWidths[i]);
                 }
-            });
+                viewport.scrollLeft = cumulativeLeft - anchor.offset;
+            }
 
-            // 3. Render content
+            // 5. Build Content
             const offsetY = startIndex * AVG_ROW_HEIGHT;
             let html = '<tr class="buffer-row" style="height:' + offsetY + 'px"><td colspan="' + currentHeaders.length + '"></td></tr>';
             
@@ -461,29 +492,20 @@ function getWebviewContent(
                 let cells = '';
                 for (let j = 0; j < currentHeaders.length; j++) {
                     const val = getCellValue(i, j);
-                    cells += '<td data-row="' + i + '" data-col="' + j + '">' + escapeHtml(val) + '</td>';
+                    const escaped = escapeHtml(val);
+                    cells += '<td data-row="' + i + '" data-col="' + j + '" title="' + escaped + '">' + escaped + '</td>';
                 }
                 html += '<tr class="' + rowClass + '">' + cells + '</tr>';
             }
             body.innerHTML = html;
-
-            // 4. Anchor position correction
-            requestAnimationFrame(() => {
-                const finalThs = header.querySelectorAll('th');
-                if (finalThs[anchor.index]) {
-                    const newOffsetLeft = finalThs[anchor.index].offsetLeft;
-                    viewport.scrollLeft = newOffsetLeft - anchor.offset;
-                }
-            });
         }
 
-        viewport.addEventListener('scroll', render);
-        window.addEventListener('resize', render);
+        viewport.addEventListener('scroll', requestRender);
+        window.addEventListener('resize', requestRender);
 
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.command === 'startData') {
-                // Stage the new metadata without clearing the screen yet
                 window.stagedHeaders = message.headers;
                 window.stagedColCount = message.colCount;
                 window.isFirstBatch = true;
@@ -493,7 +515,6 @@ function getWebviewContent(
                 const newRowsCount = message.rowCount;
 
                 if (window.isFirstBatch) {
-                    // Atomic Swap: First batch of new stream has arrived
                     currentHeaders = window.stagedHeaders;
                     colCount = window.stagedColCount;
                     textBuffer = newTextPart;
@@ -501,7 +522,6 @@ function getWebviewContent(
                     rowCount = newRowsCount;
                     window.isFirstBatch = false;
 
-                    // Update headers and reset state
                     lockedWidths.length = 0;
                     currentHeaders.forEach((h, i) => {
                         lockedWidths[i] = measureCellWidth(h, true);
@@ -514,10 +534,8 @@ function getWebviewContent(
                     }
                     headerHtml += '</tr>';
                     header.innerHTML = headerHtml;
-
-                    body.innerHTML = ''; // Only clear now
+                    body.innerHTML = '';
                 } else {
-                    // Standard incremental append logic
                     const combinedText = new Uint8Array(textBuffer.length + newTextPart.length);
                     combinedText.set(textBuffer);
                     combinedText.set(newTextPart, textBuffer.length);
@@ -536,12 +554,10 @@ function getWebviewContent(
 
                 spacer.style.height = (rowCount * AVG_ROW_HEIGHT) + AVG_ROW_HEIGHT + 'px';
                 stats.textContent = 'Rows: ' + rowCount + (message.command === 'appendData' ? ' (loading...)' : '');
-
-                // Trigger render
-                render();
+                requestRender();
             } else if (message.command === 'endData') {
                 stats.textContent = 'Rows: ' + rowCount;
-                render();
+                requestRender();
             }
         });
 
