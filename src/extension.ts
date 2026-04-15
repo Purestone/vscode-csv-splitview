@@ -8,11 +8,32 @@ import { findCsvCellRange } from './csvCellRange';
 let currentPanel: vscode.WebviewPanel | undefined = undefined;
 let currentDocumentUri: vscode.Uri | undefined = undefined;
 let updateTimer: NodeJS.Timeout | undefined = undefined;
+let autoReleaseTimer: NodeJS.Timeout | undefined = undefined;
 
 let lastOptionsKey = '';
 let currentStreamId = 0;
 
 export function activate(context: vscode.ExtensionContext) {
+    const startAutoReleaseTimer = () => {
+        if (autoReleaseTimer) clearTimeout(autoReleaseTimer);
+        const config = vscode.workspace.getConfiguration('csv-splitview');
+        const timeout = config.get<number>('autoReleaseTimeout', 0);
+        if (timeout > 0 && currentPanel) {
+            autoReleaseTimer = setTimeout(() => {
+                if (currentPanel && !currentPanel.visible) {
+                    currentPanel.dispose();
+                }
+            }, timeout * 1000);
+        }
+    };
+
+    const stopAutoReleaseTimer = () => {
+        if (autoReleaseTimer) {
+            clearTimeout(autoReleaseTimer);
+            autoReleaseTimer = undefined;
+        }
+    };
+
     const updateWebview = async (forceReloadHtml: boolean = false) => {
         if (!currentPanel || !currentDocumentUri) return;
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === currentDocumentUri?.toString());
@@ -143,9 +164,18 @@ export function activate(context: vscode.ExtensionContext) {
             );
 
             currentPanel.onDidDispose(() => {
+                stopAutoReleaseTimer();
                 currentPanel = undefined;
                 currentDocumentUri = undefined;
                 lastOptionsKey = '';
+            }, null, context.subscriptions);
+
+            currentPanel.onDidChangeViewState(e => {
+                if (e.webviewPanel.visible) {
+                    stopAutoReleaseTimer();
+                } else {
+                    startAutoReleaseTimer();
+                }
             }, null, context.subscriptions);
 
             currentPanel.webview.onDidReceiveMessage(message => {
@@ -168,6 +198,13 @@ export function activate(context: vscode.ExtensionContext) {
     }, null, context.subscriptions);
 
     vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('csv-splitview.autoReleaseTimeout')) {
+            if (currentPanel && !currentPanel.visible) {
+                startAutoReleaseTimer();
+            } else {
+                stopAutoReleaseTimer();
+            }
+        }
         if (event.affectsConfiguration('csv-splitview')) {
             updateWebview(true);
         }

@@ -70,6 +70,11 @@
           "type": "string",
           "default": "rgba(255, 255, 255, 0.03)",
           "description": "Background color for even rows in dark mode."
+        },
+        "csv-splitview.autoReleaseTimeout": {
+          "type": "number",
+          "default": 0,
+          "description": "Automatically close the preview when it has been hidden for this many seconds. Set to 0 to disable."
         }
       }
     },
