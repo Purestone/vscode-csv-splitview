@@ -73,7 +73,7 @@
         },
         "csv-splitview.autoReleaseTimeout": {
           "type": "number",
-          "default": 0,
+          "default": 30,
           "description": "Automatically close the preview when it has been hidden for this many seconds. Set to 0 to disable."
         }
       }

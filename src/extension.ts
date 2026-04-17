@@ -160,7 +160,7 @@ export function activate(context: vscode.ExtensionContext) {
                 'csvPreview',
                 `Preview: ${path.basename(document.fileName)}`,
                 vscode.ViewColumn.Beside,
-                { enableScripts: true, retainContextWhenHidden: true }
+                { enableScripts: true, retainContextWhenHidden: false }
             );
 
             currentPanel.onDidDispose(() => {
@@ -173,6 +173,7 @@ export function activate(context: vscode.ExtensionContext) {
             currentPanel.onDidChangeViewState(e => {
                 if (e.webviewPanel.visible) {
                     stopAutoReleaseTimer();
+                    updateWebview(false);
                 } else {
                     startAutoReleaseTimer();
                 }
