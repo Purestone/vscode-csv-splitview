@@ -6,7 +6,7 @@
   "publisher": "purestone",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Purestone/csv-splitview.git"
+    "url": "https://github.com/Purestone/vscode-csv-splitview.git"
   },
   "engines": {
     "vscode": "^1.80.0"

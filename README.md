@@ -1,16 +1,18 @@
 
 # CSV SplitView
 
-[![GitHub Repo](https://img.shields.io/badge/repo-github.com%2FPurestone%2Fvscode--csv--splitview-blue?logo=github)](https://github.com/Purestone/vscode-csv-splitview)
+CSV SplitView is a high-performance VS Code extension that lets you preview CSV and TSV files in a true side-by-side (split view) interactive table. It is designed to be lightweight and zero-config, with state management handled directly in the status bar for minimum memory overhead.
 
-CSV SplitView is a VS Code extension that lets you preview CSV and TSV files in a true side-by-side (split view) interactive table, making it easy to compare data and source at a glance.
+
 
 ## Features
 
-- True split/side-by-side preview: See your CSV/TSV file as a colorful table right next to the raw text.
-- Click with Cmd (macOS) or Ctrl (Windows/Linux) on a cell to instantly jump to the corresponding field in the editor.
-- Theme-aware colors using VS Code theme variables.
-- Configurable row background mode with automatic light/dark detection.
+- **True split/side-by-side preview:** See your CSV/TSV file as a colorful table right next to the raw text.
+- **Smart Status Bar:** Real-time Ln/Col coordinates and total row/column counts shown directly in the VS Code status bar.
+- **Hover Tracking:** Instantly see the coordinates of the cell under your mouse cursor.
+- **Jump to Source:** `Cmd + Click` (macOS) or `Ctrl + Click` (Windows/Linux) on any cell to instantly jump to the corresponding field in the raw editor.
+- **Zero Config Theming:** Automatically adapts to your VS Code theme (Light, Dark, and High Contrast).
+- **High Performance:** Uses specialized streaming parsing and virtual rendering to handle large files smoothly.
 
 ## Commands
 
@@ -18,26 +20,24 @@ CSV SplitView is a VS Code extension that lets you preview CSV and TSV files in 
 
 ## Settings
 
-- `csv-splitview.colors`: Column color palette.
-- `csv-splitview.rowBackgroundMode`: `auto`, `light`, or `dark`.
-- `csv-splitview.rowBackgroundLightOdd`: Light theme odd row color.
-- `csv-splitview.rowBackgroundLightEven`: Light theme even row color.
-- `csv-splitview.rowBackgroundDarkOdd`: Dark theme odd row color.
-- `csv-splitview.rowBackgroundDarkEven`: Dark theme even row color.
+- `csv-splitview.colors`: Column color palette (supports VS Code theme variables).
+- `csv-splitview.autoReleaseTimeout`: Automatically close the preview when hidden to save memory.
 
 ## Development
 
 1. Install dependencies:
-   npm install
+   `npm install`
 2. Build:
-   npm run compile
+   `npm run compile`
 3. Debug:
-   Run the `Run Extension` launch target in VS Code.
+   Run the `Extension` launch target in VS Code.
 
-## Repository
+## Install & Repository
 
-<https://github.com/Purestone/vscode-csv-splitview>
+[Visual Studio Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Purestone.csv-splitview)
+
+[GitHub Repo](https://github.com/Purestone/vscode-csv-splitview)
 
 ## License
 
-MIT
+[MIT](LICENSE)
