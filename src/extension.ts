@@ -67,24 +67,15 @@ export function activate(context: vscode.ExtensionContext) {
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === currentDocumentUri?.toString());
         if (!editor) return;
 
-        const config = vscode.workspace.getConfiguration('csv-splitview');
+        const config = vscode.workspace.getConfiguration('csv-splitview', currentDocumentUri || null);
+        const markdownConfig = vscode.workspace.getConfiguration('markdown.preview', currentDocumentUri || null);
         const colors = config.get<string[]>('colors', []);
-        const rowBackgroundMode = config.get<'auto' | 'light' | 'dark'>('rowBackgroundMode', 'auto');
-        const rowBgLightOdd = config.get<string>('rowBackgroundLightOdd', 'rgba(0, 0, 0, 0.05)');
-        const rowBgLightEven = config.get<string>('rowBackgroundLightEven', 'rgba(0, 0, 0, 0.02)');
-        const rowBgDarkOdd = config.get<string>('rowBackgroundDarkOdd', 'rgba(255, 255, 255, 0.06)');
-        const rowBgDarkEven = config.get<string>('rowBackgroundDarkEven', 'rgba(255, 255, 255, 0.03)');
-
-        const optionsKey = JSON.stringify({ colors, rowBackgroundMode, rowBgLightOdd, rowBgLightEven, rowBgDarkOdd, rowBgDarkEven });
+        const fontFamily = markdownConfig.get<string>('fontFamily', 'var(--vscode-font-family)');
+        
+        const optionsKey = JSON.stringify({ colors, fontFamily });
         
         if (forceReloadHtml || optionsKey !== lastOptionsKey) {
-            currentPanel.webview.html = getWebviewContent(colors, {
-                rowBackgroundMode,
-                rowBgLightOdd,
-                rowBgLightEven,
-                rowBgDarkOdd,
-                rowBgDarkEven
-            });
+            currentPanel.webview.html = getWebviewContent(colors, fontFamily);
             lastOptionsKey = optionsKey;
             return;
         }
@@ -259,7 +250,7 @@ export function activate(context: vscode.ExtensionContext) {
     }, null, context.subscriptions);
 
     vscode.window.onDidChangeActiveColorTheme(() => {
-        updateWebview(false);
+        updateWebview(true); // Always reload to ensure CSS classes and standard variables update
     }, null, context.subscriptions);
 
     context.subscriptions.push(disposable);
@@ -299,25 +290,17 @@ function revealCell(uri: vscode.Uri | undefined, rowIndex: number, colIndex: num
     });
 }
 
-function getWebviewContent(
-    colors: string[],
-    rowOptions: {
-        rowBackgroundMode: 'auto' | 'light' | 'dark';
-        rowBgLightOdd: string;
-        rowBgLightEven: string;
-        rowBgDarkOdd: string;
-        rowBgDarkEven: string;
-    }
-): string {
+function getWebviewContent(colors: string[], fontFamily: string): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV SplitView</title>
     <style>
         body {
-            font-family: var(--vscode-font-family);
+            font-family: ${fontFamily}, var(--vscode-font-family);
             background-color: var(--vscode-editor-background);
             color: var(--vscode-editor-foreground);
             padding: 0;
@@ -325,6 +308,17 @@ function getWebviewContent(
             height: 100vh;
             overflow: hidden;
         }
+
+        /* Default row backgrounds using standard behavior */
+        body.vscode-light {
+            --csv-row-bg-odd: rgba(0, 0, 0, 0.05);
+            --csv-row-bg-even: rgba(0, 0, 0, 0.02);
+        }
+        body.vscode-dark, body.vscode-high-contrast {
+            --csv-row-bg-odd: rgba(255, 255, 255, 0.06);
+            --csv-row-bg-even: rgba(255, 255, 255, 0.03);
+        }
+
         #viewport {
             height: 100vh;
             width: 100vw;
@@ -334,14 +328,6 @@ function getWebviewContent(
         #spacer {
             width: 1px;
             visibility: hidden;
-        }
-        body.row-theme-light {
-            --csv-row-bg-odd: ${rowOptions.rowBgLightOdd};
-            --csv-row-bg-even: ${rowOptions.rowBgLightEven};
-        }
-        body.row-theme-dark {
-            --csv-row-bg-odd: ${rowOptions.rowBgDarkOdd};
-            --csv-row-bg-even: ${rowOptions.rowBgDarkEven};
         }
         table {
             border-collapse: separate;
@@ -428,9 +414,6 @@ function getWebviewContent(
         const table = document.getElementById('csvTable');
         const header = document.getElementById('csvHeader');
         const body = document.getElementById('csvBody');
-        const rowOptions = {
-            rowBackgroundMode: '${rowOptions.rowBackgroundMode}'
-        };
 
         let currentHeaders = [];
         let textBuffer = null;
@@ -664,15 +647,6 @@ function getWebviewContent(
         document.addEventListener('keydown', (e) => (e.metaKey || e.ctrlKey) && document.body.classList.add('cmd-hover'));
         document.addEventListener('keyup', (e) => !e.metaKey && !e.ctrlKey && document.body.classList.remove('cmd-hover'));
 
-        const applyRowTheme = () => {
-            document.body.classList.remove('row-theme-light', 'row-theme-dark');
-            const isLightTheme = document.body.classList.contains('vscode-light') ||
-                               document.body.classList.contains('vscode-high-contrast-light');
-            if (rowOptions.rowBackgroundMode === 'light') document.body.classList.add('row-theme-light');
-            else if (rowOptions.rowBackgroundMode === 'dark') document.body.classList.add('row-theme-dark');
-            else document.body.classList.add(isLightTheme ? 'row-theme-light' : 'row-theme-dark');
-        };
-        applyRowTheme();
         vscode.postMessage({ command: 'ready' });
     </script>
 </body>

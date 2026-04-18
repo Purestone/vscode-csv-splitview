@@ -26,6 +26,7 @@
       "properties": {
         "csv-splitview.colors": {
           "type": "array",
+          "scope": "resource",
           "items": {
             "type": "string"
           },
@@ -41,38 +42,9 @@
           ],
           "description": "Colors to use for the column text. You can use any valid CSS color, including VS Code theme variables."
         },
-        "csv-splitview.rowBackgroundMode": {
-          "type": "string",
-          "enum": [
-            "auto",
-            "light",
-            "dark"
-          ],
-          "default": "auto",
-          "description": "Row background theme mode. Auto detects current VS Code theme in preview."
-        },
-        "csv-splitview.rowBackgroundLightOdd": {
-          "type": "string",
-          "default": "rgba(0, 0, 0, 0.05)",
-          "description": "Background color for odd rows in light mode."
-        },
-        "csv-splitview.rowBackgroundLightEven": {
-          "type": "string",
-          "default": "rgba(0, 0, 0, 0.02)",
-          "description": "Background color for even rows in light mode."
-        },
-        "csv-splitview.rowBackgroundDarkOdd": {
-          "type": "string",
-          "default": "rgba(255, 255, 255, 0.06)",
-          "description": "Background color for odd rows in dark mode."
-        },
-        "csv-splitview.rowBackgroundDarkEven": {
-          "type": "string",
-          "default": "rgba(255, 255, 255, 0.03)",
-          "description": "Background color for even rows in dark mode."
-        },
         "csv-splitview.autoReleaseTimeout": {
           "type": "number",
+          "scope": "resource",
           "default": 30,
           "description": "Automatically close the preview when it has been hidden for this many seconds. Set to 0 to disable."
         }
