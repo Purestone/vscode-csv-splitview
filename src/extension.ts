@@ -9,11 +9,39 @@ let currentPanel: vscode.WebviewPanel | undefined = undefined;
 let currentDocumentUri: vscode.Uri | undefined = undefined;
 let updateTimer: NodeJS.Timeout | undefined = undefined;
 let autoReleaseTimer: NodeJS.Timeout | undefined = undefined;
+let statusBarItem: vscode.StatusBarItem | undefined = undefined;
 
 let lastOptionsKey = '';
 let currentStreamId = 0;
 
+let statsState = {
+    totalRows: 0,
+    totalCols: 0,
+    currentRow: -1,
+    currentCol: -1
+};
+
+function updateStatusBar() {
+    if (!statusBarItem) return;
+
+    if (!currentPanel) {
+        statusBarItem.hide();
+        return;
+    }
+
+    const rowStr = statsState.currentRow >= 0 ? `Ln ${statsState.currentRow + 1}` : '--';
+    const colStr = statsState.currentCol >= 0 ? `Col ${statsState.currentCol + 1}` : '--';
+    const totalRowStr = statsState.totalRows > 0 ? statsState.totalRows.toLocaleString() : '0';
+    const totalColStr = statsState.totalCols > 0 ? statsState.totalCols.toLocaleString() : '0';
+
+    statusBarItem.text = `$(table) ${rowStr}, ${colStr} (${totalRowStr} rows, ${totalColStr} cols)`;
+    statusBarItem.show();
+}
+
 export function activate(context: vscode.ExtensionContext) {
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    context.subscriptions.push(statusBarItem);
+
     const startAutoReleaseTimer = () => {
         if (autoReleaseTimer) clearTimeout(autoReleaseTimer);
         const config = vscode.workspace.getConfiguration('csv-splitview');
@@ -76,6 +104,10 @@ export function activate(context: vscode.ExtensionContext) {
         let isFirstBatch = true;
         const encoder = new TextEncoder();
 
+        statsState.totalRows = 0;
+        statsState.totalCols = 0;
+        updateStatusBar();
+
         Papa.parse(inputStream, {
             header: false,
             skipEmptyLines: false,
@@ -95,6 +127,7 @@ export function activate(context: vscode.ExtensionContext) {
                     colCount = headers.length;
                     dataStart = 1;
                     
+                    statsState.totalCols = colCount;
                     currentPanel?.webview.postMessage({
                         command: 'startData',
                         headers,
@@ -106,6 +139,9 @@ export function activate(context: vscode.ExtensionContext) {
                 if (batchRows.length === 0) return;
 
                 const rowCount = batchRows.length;
+                statsState.totalRows += rowCount;
+                updateStatusBar();
+
                 let totalByteLength = 0;
                 for (const row of batchRows) {
                     for (let j = 0; j < colCount; j++) {
@@ -139,6 +175,7 @@ export function activate(context: vscode.ExtensionContext) {
             },
             complete: () => {
                 if (streamId === currentStreamId) {
+                    updateStatusBar();
                     currentPanel?.webview.postMessage({ command: 'endData' });
                 }
             }
@@ -168,20 +205,30 @@ export function activate(context: vscode.ExtensionContext) {
                 currentPanel = undefined;
                 currentDocumentUri = undefined;
                 lastOptionsKey = '';
+                updateStatusBar();
             }, null, context.subscriptions);
 
             currentPanel.onDidChangeViewState(e => {
                 if (e.webviewPanel.visible) {
                     stopAutoReleaseTimer();
                     updateWebview(false);
+                    updateStatusBar();
                 } else {
                     startAutoReleaseTimer();
+                    statusBarItem?.hide();
                 }
             }, null, context.subscriptions);
 
             currentPanel.webview.onDidReceiveMessage(message => {
                 if (message.command === 'locateCell') {
                     revealCell(currentDocumentUri, message.row, message.col);
+                    statsState.currentRow = message.row;
+                    statsState.currentCol = message.col;
+                    updateStatusBar();
+                } else if (message.command === 'updateSelection') {
+                    statsState.currentRow = message.row;
+                    statsState.currentCol = message.col;
+                    updateStatusBar();
                 } else if (message.command === 'ready') {
                     updateWebview(false);
                 }
@@ -311,7 +358,7 @@ function getWebviewContent(
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             padding: 8px 12px;
             text-align: left;
-            cursor: text;
+            cursor: pointer;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -358,17 +405,6 @@ function getWebviewContent(
             cursor: pointer;
         }
 
-        #stats {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-editorGroup-border);
-            padding: 4px 8px;
-            font-size: 10px;
-            opacity: 0.7;
-            z-index: 200;
-        }
         .buffer-row td {
             padding: 0 !important;
             border: 0 !important;
@@ -384,7 +420,6 @@ function getWebviewContent(
             <tbody id="csvBody"></tbody>
         </table>
     </div>
-    <div id="stats">Rows: 0</div>
     
     <script>
         const vscode = acquireVsCodeApi();
@@ -393,7 +428,6 @@ function getWebviewContent(
         const table = document.getElementById('csvTable');
         const header = document.getElementById('csvHeader');
         const body = document.getElementById('csvBody');
-        const stats = document.getElementById('stats');
         const rowOptions = {
             rowBackgroundMode: '${rowOptions.rowBackgroundMode}'
         };
@@ -475,9 +509,8 @@ function getWebviewContent(
             let endIndex = Math.ceil((scrollTop + viewportHeight) / AVG_ROW_HEIGHT) + BUFFER_ROWS;
             endIndex = Math.min(rowCount, endIndex);
 
-            // 3. Scan widths (Optimized: only check a few rows if we already have many)
+            // 3. Scan widths
             let widthsChanged = false;
-            // Always check headers
             if (currentHeaders.length > 0) {
                 for (let j = 0; j < currentHeaders.length; j++) {
                     const headerW = measureCellWidth(currentHeaders[j], true);
@@ -488,13 +521,11 @@ function getWebviewContent(
                 }
             }
 
-            // Check current visible rows ONLY to update width cache
-            // We sample rows to avoid expensive calculations on every scroll
             const sampleStep = (endIndex - startIndex > 100) ? 5 : 1;
             for (let i = startIndex; i < endIndex; i += sampleStep) {
                 for (let j = 0; j < colCount; j++) {
                     const val = getCellValue(i, j);
-                    if (val.length < (lockedWidths[j] || 0) / 10) continue; // Optimization: skip tiny strings
+                    if (val.length < (lockedWidths[j] || 0) / 10) continue;
                     const w = measureCellWidth(val);
                     if (w > (lockedWidths[j] || 0)) {
                         lockedWidths[j] = w;
@@ -513,7 +544,6 @@ function getWebviewContent(
                     }
                 });
                 
-                // CRITICAL: Synchronous anchor correction to prevent horizontal jitter
                 let cumulativeLeft = 0;
                 for (let i = 0; i < anchor.index; i++) {
                     cumulativeLeft += Math.min(800, lockedWidths[i]);
@@ -591,11 +621,23 @@ function getWebviewContent(
                 }
 
                 spacer.style.height = (rowCount * AVG_ROW_HEIGHT) + AVG_ROW_HEIGHT + 'px';
-                stats.textContent = 'Rows: ' + rowCount + (message.command === 'appendData' ? ' (loading...)' : '');
                 requestRender();
             } else if (message.command === 'endData') {
-                stats.textContent = 'Rows: ' + rowCount;
                 requestRender();
+            }
+        });
+
+        table.addEventListener('mouseover', (event) => {
+            let target = event.target;
+            if (target.tagName !== 'TD' && target.tagName !== 'TH') {
+                target = target.closest('td, th');
+            }
+            if (target && target.tagName === 'TD') {
+                const row = parseInt(target.getAttribute('data-row') || '-1', 10);
+                const col = parseInt(target.getAttribute('data-col') || '-1', 10);
+                if (row !== -1 && col !== -1) {
+                    vscode.postMessage({ command: 'updateSelection', row, col });
+                }
             }
         });
 
@@ -605,7 +647,7 @@ function getWebviewContent(
                 if (target.tagName !== 'TD' && target.tagName !== 'TH') {
                     target = target.closest('td, th');
                 }
-                if (target && (target.tagName === 'TD' || target.tagName === 'TH')) {
+                if (target && target.tagName === 'TD') {
                     const row = parseInt(target.getAttribute('data-row') || '-1', 10);
                     const col = parseInt(target.getAttribute('data-col') || '-1', 10);
                     if (row !== -1 && col !== -1) {
