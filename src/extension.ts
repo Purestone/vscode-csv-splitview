@@ -366,13 +366,8 @@ function getWebviewContent(
             border: 1px solid var(--vscode-editorGroup-border);
             padding: 4px 8px;
             font-size: 10px;
-            opacity: 0;
-            transition: opacity 0.1s ease;
-            z-index: 200;
-            pointer-events: none;
-        }
-        #stats.visible {
             opacity: 0.7;
+            z-index: 200;
         }
         .buffer-row td {
             padding: 0 !important;
@@ -543,15 +538,7 @@ function getWebviewContent(
             body.innerHTML = html;
         }
 
-        let statsTimeout;
-        viewport.addEventListener('scroll', () => {
-            stats.classList.add('visible');
-            clearTimeout(statsTimeout);
-            statsTimeout = setTimeout(() => {
-                stats.classList.remove('visible');
-            }, 1500);
-            requestRender();
-        });
+        viewport.addEventListener('scroll', requestRender);
         window.addEventListener('resize', requestRender);
 
         window.addEventListener('message', event => {
@@ -605,14 +592,9 @@ function getWebviewContent(
 
                 spacer.style.height = (rowCount * AVG_ROW_HEIGHT) + AVG_ROW_HEIGHT + 'px';
                 stats.textContent = 'Rows: ' + rowCount + (message.command === 'appendData' ? ' (loading...)' : '');
-                stats.classList.add('visible');
                 requestRender();
             } else if (message.command === 'endData') {
                 stats.textContent = 'Rows: ' + rowCount;
-                clearTimeout(statsTimeout);
-                statsTimeout = setTimeout(() => {
-                    stats.classList.remove('visible');
-                }, 2000);
                 requestRender();
             }
         });
