@@ -1,3 +1,5 @@
+*.csv
+assets/*.excalidraw
 .vscode/**
 .vscode-test/**
 src/**
